@@ -1,219 +1,238 @@
-// ============================================================
-//  Kora Live - Cloudflare Worker (API only)
-//  Static files (index.html/style.css/app.js) are served
-//  automatically from the "public" folder via the ASSETS
-//  binding configured in wrangler.toml - no need to embed
-//  them here.
-// ============================================================
-
 const API_BASE = "https://v3.football.api-sports.io";
 
-function todayKey(timezone) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date());
-  const get = (t) => parts.find((p) => p.type === t).value;
-  return `${get("year")}-${get("month")}-${get("day")}`;
-}
+const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "LIVE"]);
+const FINISHED_STATUSES = new Set(["FT", "AET", "PEN"]);
 
-function normalizeFixture(item) {
-  const f = item.fixture || {};
-  const league = item.league || {};
-  const teams = item.teams || {};
-  const goals = item.goals || {};
-  const status = f.status || {};
-
-  return {
-    id: f.id,
-    date: f.date,
-    timestamp: f.timestamp,
-    referee: f.referee,
-    venue: f.venue || {},
-    status: {
-      short: status.short,
-      long: status.long,
-      elapsed: status.elapsed,
-      extra: status.extra
-    },
-    league: {
-      id: league.id,
-      name: league.name,
-      country: league.country,
-      logo: league.logo,
-      flag: league.flag
-    },
-    home: teams.home || {},
-    away: teams.away || {},
-    goals: {
-      home: goals.home,
-      away: goals.away
-    }
-  };
-}
-
-export async function callFootballApi(endpoint, params, env) {
-  if (!env.API_FOOTBALL_KEY) {
-    const err = new Error("API_FOOTBALL_KEY is missing. Add it in Cloudflare Pages > Settings > Environment variables.");
-    err.status = 500;
-    throw err;
-  }
-
-  const qs = new URLSearchParams(params).toString();
-  const url = `${API_BASE}/${endpoint}${qs ? `?${qs}` : ""}`;
-
-  const res = await fetch(url, {
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
     headers: {
-      "x-apisports-key": env.API_FOOTBALL_KEY,
-      "Accept": "application/json"
+      "content-type": "application/json; charset=utf-8",
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "GET, OPTIONS",
+      "access-control-allow-headers": "Content-Type, Accept"
+    }
+  });
+}
+
+function currentSeason(date = new Date().toISOString().slice(0, 10)) {
+  const month = Number(date.slice(5, 7));
+  const year = Number(date.slice(0, 4));
+  return month >= 7 ? year : year - 1;
+}
+
+async function apiFootball(path, env) {
+  const key = env.API_FOOTBALL_KEY;
+  if (!key) throw new Error("API_FOOTBALL_KEY is not configured.");
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      "x-apisports-key": key,
+      "accept": "application/json"
     }
   });
 
-  const data = await res.json();
+  const text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`API-Football returned invalid JSON (${response.status}).`);
+  }
 
-  if (!res.ok || (data.errors && Object.keys(data.errors).length)) {
-    const err = new Error("API-Football returned an error.");
-    err.status = res.status || 502;
-    err.details = data.errors || data;
-    throw err;
+  if (!response.ok) {
+    throw new Error(`API-Football HTTP ${response.status}`);
+  }
+
+  if (data?.errors && Object.keys(data.errors).length) {
+    const errors = Array.isArray(data.errors)
+      ? data.errors.join(", ")
+      : Object.values(data.errors).join(", ");
+    throw new Error(errors || "API-Football returned an error.");
   }
 
   return data;
 }
 
-function jsonError(error) {
-  return new Response(
-    JSON.stringify({
-      success: false,
-      message: error.message || "Unexpected error.",
-      details: error.details || null
-    }),
-    {
-      status: error.status || 500,
-      headers: { "content-type": "application/json; charset=utf-8" }
-    }
-  );
+function normalizeFixture(item) {
+  const f = item?.fixture || {};
+  const l = item?.league || {};
+  const t = item?.teams || {};
+  const g = item?.goals || {};
+  const s = f?.status || {};
+  const code = s.short || "";
+  const live = LIVE_STATUSES.has(code);
+  const finished = FINISHED_STATUSES.has(code);
+
+  return {
+    id: String(f.id ?? ""),
+    date: f.date || null,
+    state: live ? "in" : finished ? "post" : "pre",
+    completed: finished,
+    home: {
+      id: t.home?.id ?? null,
+      name: t.home?.name || "Home",
+      logo: t.home?.logo || ""
+    },
+    away: {
+      id: t.away?.id ?? null,
+      name: t.away?.name || "Away",
+      logo: t.away?.logo || ""
+    },
+    homeScore: g.home ?? null,
+    awayScore: g.away ?? null,
+    league: l.name || "",
+    leagueId: l.id ?? null,
+    shortDetail: live
+      ? `${s.long || code}${s.elapsed ? ` • ${s.elapsed}'` : ""}`
+      : s.long || code,
+    detail: s.long || "",
+    venue: f.venue?.name || "",
+    link: null
+  };
 }
 
-async function handleHealth(env) {
-  const timezone = env.TIMEZONE || "Africa/Cairo";
-  return new Response(
-    JSON.stringify({
+async function handleApi(url, env) {
+  const path = url.pathname;
+  const p = url.searchParams;
+
+  if (path === "/api/health") {
+    return json({ ok: true, service: "kora-live-api", provider: "api-football" });
+  }
+
+  if (path === "/api/matches" || path === "/api/fixtures") {
+    const date = p.get("date") || new Date().toISOString().slice(0, 10);
+    const timezone = p.get("timezone") || "Africa/Cairo";
+    const data = await apiFootball(
+      `/fixtures?date=${encodeURIComponent(date)}&timezone=${encodeURIComponent(timezone)}`,
+      env
+    );
+
+    return json({
       ok: true,
-      apiConfigured: Boolean(env.API_FOOTBALL_KEY),
-      timezone,
-      today: todayKey(timezone)
-    }),
-    { headers: { "content-type": "application/json; charset=utf-8" } }
-  );
-}
-
-async function handleFixtures(request, env, ctx) {
-  const timezone = env.TIMEZONE || "Africa/Cairo";
-  const ttl = Number(env.FIXTURES_CACHE_S || 1800);
-  const url = new URL(request.url);
-  const date = url.searchParams.get("date") || todayKey(timezone);
-
-  const cache = caches.default;
-  const cacheKey = new Request(url.toString(), request);
-  const cached = await cache.match(cacheKey);
-  if (cached) return cached;
-
-  try {
-    const data = await callFootballApi("fixtures", { date, timezone }, env);
-    const payload = {
-      success: true,
       date,
-      cached: false,
-      results: (data.response || []).map(normalizeFixture)
-    };
-    const response = new Response(JSON.stringify(payload), {
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "Cache-Control": `public, max-age=${ttl}`
-      }
+      matches: Array.isArray(data.response) ? data.response.map(normalizeFixture) : []
     });
-    ctx.waitUntil(cache.put(cacheKey, response.clone()));
-    return response;
-  } catch (error) {
-    return jsonError(error);
   }
-}
 
-async function handleLive(request, env, ctx) {
-  const timezone = env.TIMEZONE || "Africa/Cairo";
-  const ttl = Number(env.LIVE_CACHE_S || 60);
-
-  const cache = caches.default;
-  const cacheKey = new Request(request.url, request);
-  const cached = await cache.match(cacheKey);
-  if (cached) return cached;
-
-  try {
-    const data = await callFootballApi("fixtures", { live: "all", timezone }, env);
-    const payload = {
-      success: true,
-      cached: false,
-      results: (data.response || []).map(normalizeFixture)
-    };
-    const response = new Response(JSON.stringify(payload), {
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "Cache-Control": `public, max-age=${ttl}`
-      }
+  if (path === "/api/live") {
+    const data = await apiFootball("/fixtures?live=all", env);
+    return json({
+      ok: true,
+      matches: Array.isArray(data.response) ? data.response.map(normalizeFixture) : []
     });
-    ctx.waitUntil(cache.put(cacheKey, response.clone()));
-    return response;
-  } catch (error) {
-    return jsonError(error);
   }
-}
 
-async function handleFixtureById(request, env, ctx, id) {
-  const timezone = env.TIMEZONE || "Africa/Cairo";
+  if (path === "/api/lineups") {
+    const id = p.get("id") || p.get("fixture");
+    if (!id) return json({ ok: false, error: "Missing match id." }, 400);
+    const data = await apiFootball(`/fixtures/lineups?fixture=${encodeURIComponent(id)}`, env);
+    return json({ ok: true, fixture: id, lineups: Array.isArray(data.response) ? data.response : [] });
+  }
 
-  const cache = caches.default;
-  const cacheKey = new Request(request.url, request);
-  const cached = await cache.match(cacheKey);
-  if (cached) return cached;
+  if (path === "/api/match" || path === "/api/summary") {
+    const id = p.get("id") || p.get("event");
+    if (!id) return json({ ok: false, error: "Missing match id." }, 400);
 
-  try {
-    const data = await callFootballApi("fixtures", { id, timezone }, env);
-    const payload = {
-      success: true,
-      cached: false,
-      result: (data.response && data.response[0]) || null
-    };
-    const response = new Response(JSON.stringify(payload), {
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "Cache-Control": "public, max-age=600"
-      }
+    const data = await apiFootball(`/fixtures?id=${encodeURIComponent(id)}`, env);
+    return json({ ok: true, match: data.response?.[0] || null });
+  }
+
+  if (path === "/api/leagues") {
+    const search = p.get("search");
+    const endpoint = search
+      ? `/leagues?search=${encodeURIComponent(search)}`
+      : "/leagues?current=true";
+    const data = await apiFootball(endpoint, env);
+    return json({ ok: true, leagues: data.response || [] });
+  }
+
+  if (path === "/api/teams") {
+    const league = p.get("league");
+    if (!league) return json({ ok: false, error: "Missing league parameter." }, 400);
+    const season = p.get("season") || currentSeason();
+    const data = await apiFootball(
+      `/teams?league=${encodeURIComponent(league)}&season=${encodeURIComponent(season)}`,
+      env
+    );
+    return json({ ok: true, league, season, teams: data.response || [] });
+  }
+
+  if (path === "/api/team") {
+    const id = p.get("id");
+    if (!id) return json({ ok: false, error: "Missing team id." }, 400);
+    const data = await apiFootball(`/teams?id=${encodeURIComponent(id)}`, env);
+    return json({ ok: true, team: data.response?.[0] || null });
+  }
+
+  if (path === "/api/standings") {
+    const league = p.get("league");
+    if (!league) return json({ ok: false, error: "Missing league parameter." }, 400);
+    const season = p.get("season") || currentSeason();
+    const data = await apiFootball(
+      `/standings?league=${encodeURIComponent(league)}&season=${encodeURIComponent(season)}`,
+      env
+    );
+    return json({ ok: true, league, season, standings: data.response || [] });
+  }
+
+  if (path === "/api/search") {
+    const q = (p.get("q") || "").trim();
+    if (q.length < 3) {
+      return json({ ok: false, error: "Search query must be at least 3 characters." }, 400);
+    }
+    const [teamsData, leaguesData] = await Promise.all([
+      apiFootball(`/teams?search=${encodeURIComponent(q)}`, env),
+      apiFootball(`/leagues?search=${encodeURIComponent(q)}`, env)
+    ]);
+    return json({
+      ok: true,
+      teams: teamsData.response || [],
+      leagues: leaguesData.response || []
     });
-    ctx.waitUntil(cache.put(cacheKey, response.clone()));
-    return response;
-  } catch (error) {
-    return jsonError(error);
   }
+
+  if (path === "/api/news") {
+    return json({
+      ok: false,
+      error: "News is not implemented because the supplied API specification does not define a news provider."
+    }, 501);
+  }
+
+  return json({ ok: false, error: "API endpoint not found." }, 404);
 }
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     const url = new URL(request.url);
-    const path = url.pathname;
 
-    if (path === "/api/health") return handleHealth(env);
-    if (path === "/api/fixtures") return handleFixtures(request, env, ctx);
-    if (path === "/api/live") return handleLive(request, env, ctx);
-    if (path.startsWith("/api/fixture/")) {
-      const id = path.split("/").pop();
-      return handleFixtureById(request, env, ctx, id);
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-headers": "Content-Type, Accept"
+        }
+      });
     }
 
-    // Everything else (index.html, style.css, app.js, ...) is
-    // served automatically from the "public" folder.
-    return env.ASSETS.fetch(request);
+    if (url.pathname.startsWith("/api/")) {
+      try {
+        return await handleApi(url, env);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: error?.message || "Unexpected server error."
+        }, 502);
+      }
+    }
+
+    // If this Worker also has an Assets binding, serve the website files.
+    if (env.ASSETS) return env.ASSETS.fetch(request);
+
+    return new Response("Kora Live API Worker is running.", {
+      headers: { "content-type": "text/plain; charset=utf-8" }
+    });
   }
 };
