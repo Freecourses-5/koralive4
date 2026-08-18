@@ -27,16 +27,24 @@ const DICT = {
     status_finished: "انتهت",
     venue_label: "الملعب",
     referee_label: "الحكم",
-    lineup_title: "التشكيلة الأساسية",
-    lineup_loading: "جاري تحميل التشكيلة...",
-    lineup_empty: "التشكيلة لسه مش متاحة، بتظهر عادة قبل المباراة بساعة تقريبًا.",
-    lineup_subs: "الاحتياط",
-    lineup_coach: "المدرب",
     footer_tag: "منصة نتائج مباريات كرة القدم مباشرة",
     theme_toggle: "تبديل المظهر",
     lang_toggle: "English",
     league_fallback: "بطولة",
     team_fallback: "الفريق",
+    tab_info: "معلومات",
+    tab_stats: "الإحصائيات",
+    tab_events: "الأحداث",
+    tab_lineups: "التشكيلة",
+    tab_h2h: "المواجهات",
+    tab_injuries: "الغيابات",
+    tab_loading: "جاري التحميل...",
+    tab_empty: "لا توجد بيانات متاحة لهذا القسم.",
+    league_label: "البطولة",
+    kickoff_label: "الموعد",
+    starting_xi: "التشكيل الأساسي",
+    substitutes: "البدلاء",
+    draws_label: "تعادل",
   },
   en: {
     brand: "Kora Live",
@@ -65,16 +73,24 @@ const DICT = {
     status_finished: "FT",
     venue_label: "Venue",
     referee_label: "Referee",
-    lineup_title: "Starting Lineup",
-    lineup_loading: "Loading lineup…",
-    lineup_empty: "Lineup not available yet, it's usually published about an hour before kickoff.",
-    lineup_subs: "Substitutes",
-    lineup_coach: "Coach",
     footer_tag: "Live football scores platform",
     theme_toggle: "Toggle theme",
     lang_toggle: "العربية",
     league_fallback: "League",
     team_fallback: "Team",
+    tab_info: "Info",
+    tab_stats: "Stats",
+    tab_events: "Events",
+    tab_lineups: "Lineups",
+    tab_h2h: "H2H",
+    tab_injuries: "Injuries",
+    tab_loading: "Loading...",
+    tab_empty: "No data available for this section.",
+    league_label: "League",
+    kickoff_label: "Kickoff",
+    starting_xi: "Starting XI",
+    substitutes: "Substitutes",
+    draws_label: "Draws",
   }
 };
 
@@ -90,6 +106,47 @@ const TOP_LEAGUE_IDS = [
   233,             // Egyptian Premier League
   1, 4, 9, 32      // World Cup, Euro, Copa America, World Cup Qualifiers
 ];
+
+const STAT_LABELS = {
+  ar: {
+    "ball possession": "الاستحواذ",
+    "total shots": "التسديدات",
+    "shots on goal": "تسديدات على المرمى",
+    "shots off goal": "تسديدات خارج المرمى",
+    "blocked shots": "تسديدات محجوبة",
+    "shots insidebox": "تسديدات داخل المنطقة",
+    "shots outsidebox": "تسديدات خارج المنطقة",
+    "corner kicks": "الركنيات",
+    "offsides": "التسلل",
+    "fouls": "الأخطاء",
+    "yellow cards": "بطاقات صفراء",
+    "red cards": "بطاقات حمراء",
+    "goalkeeper saves": "تصديات الحارس",
+    "total passes": "التمريرات",
+    "passes accurate": "تمريرات ناجحة",
+    "passes %": "دقة التمرير",
+    "expected_goals": "الأهداف المتوقعة (xG)"
+  },
+  en: {
+    "ball possession": "Ball Possession",
+    "total shots": "Total Shots",
+    "shots on goal": "Shots on Goal",
+    "shots off goal": "Shots off Goal",
+    "blocked shots": "Blocked Shots",
+    "shots insidebox": "Shots Inside Box",
+    "shots outsidebox": "Shots Outside Box",
+    "corner kicks": "Corner Kicks",
+    "offsides": "Offsides",
+    "fouls": "Fouls",
+    "yellow cards": "Yellow Cards",
+    "red cards": "Red Cards",
+    "goalkeeper saves": "Goalkeeper Saves",
+    "total passes": "Total Passes",
+    "passes accurate": "Accurate Passes",
+    "passes %": "Pass Accuracy",
+    "expected_goals": "Expected Goals (xG)"
+  }
+};
 
 const state = {
   lang: localStorage.getItem("lang") || "ar",
@@ -271,12 +328,6 @@ function render() {
     `;
   }).join("");
 
-  grid.querySelectorAll(".match").forEach(det => {
-    det.addEventListener("toggle", () => {
-      if (det.open) loadLineup(det);
-    });
-  });
-
   grid.querySelectorAll(".fav-btn").forEach(btn => {
     btn.onclick = () => {
       const id = Number(btn.dataset.league);
@@ -286,6 +337,8 @@ function render() {
       render();
     };
   });
+
+  wireMatchDetails(grid);
 }
 
 function matchRow(m) {
@@ -297,12 +350,8 @@ function matchRow(m) {
     ? "—"
     : `${m.goals.home ?? 0} - ${m.goals.away ?? 0}`;
 
-  const details = [];
-  if (m.venue && m.venue.name) details.push(`<span><b>${t("venue_label")}</b>${esc(m.venue.name)}</span>`);
-  if (m.referee) details.push(`<span><b>${t("referee_label")}</b>${esc(m.referee)}</span>`);
-
   return `
-    <details class="match" data-id="${m.id}">
+    <details class="match" data-id="${m.id}" data-home-id="${m.home.id || ""}" data-away-id="${m.away.id || ""}">
       <summary>
         <div class="side home">
           <span class="team-name">${esc(m.home.name || t("team_fallback"))}</span>
@@ -317,90 +366,204 @@ function matchRow(m) {
           <span class="team-name">${esc(m.away.name || t("team_fallback"))}</span>
         </div>
       </summary>
-      ${details.length ? `<div class="match-detail">${details.join("")}</div>` : ""}
-      <div class="lineup-wrap" data-loaded="0"></div>
+      <div class="match-panel">
+        <div class="match-tabs">
+          <button class="mtab active" data-tab="info">${t("tab_info")}</button>
+          <button class="mtab" data-tab="stats">${t("tab_stats")}</button>
+          <button class="mtab" data-tab="events">${t("tab_events")}</button>
+          <button class="mtab" data-tab="lineups">${t("tab_lineups")}</button>
+          <button class="mtab" data-tab="h2h">${t("tab_h2h")}</button>
+          <button class="mtab" data-tab="injuries">${t("tab_injuries")}</button>
+        </div>
+        <div class="match-tab-content">${renderInfoTab(m)}</div>
+      </div>
     </details>
   `;
 }
 
-/* ---------------- Lineups ---------------- */
-async function loadLineup(detailsEl) {
-  const wrap = detailsEl.querySelector(".lineup-wrap");
-  if (!wrap || wrap.dataset.loaded === "1") return;
-  wrap.dataset.loaded = "1";
-  wrap.innerHTML = `<div class="lineup-state">${t("lineup_loading")}</div>`;
-
-  try {
-    const id = detailsEl.dataset.id;
-    const res = await fetch(`/api/lineups/${id}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || t("lineup_empty"));
-    renderLineup(wrap, data.results || []);
-  } catch (e) {
-    wrap.dataset.loaded = "0";
-    wrap.innerHTML = `<div class="lineup-state">${t("lineup_empty")}</div>`;
-  }
+/* ---------------- Match detail tabs ---------------- */
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok || data.success === false) throw new Error(data.message || t("state_error"));
+  return data;
 }
 
-function renderLineup(wrap, teams) {
-  if (!teams.length) {
-    wrap.innerHTML = `<div class="lineup-state">${t("lineup_empty")}</div>`;
-    return;
-  }
-  wrap.innerHTML = `
-    <div class="lineup-title">${t("lineup_title")}</div>
-    <div class="lineups">${teams.map(teamLineupHTML).join("")}</div>
-  `;
+function renderInfoTab(m) {
+  const rows = [];
+  rows.push(`<div class="info-row"><b>${t("league_label")}</b>${esc(m.league.name || "")} · ${esc(m.league.country || "")}</div>`);
+  rows.push(`<div class="info-row"><b>${t("kickoff_label")}</b>${esc(formatDate(m.date.slice(0, 10)))} · ${esc(formatTime(m.date))}</div>`);
+  if (m.venue && m.venue.name) rows.push(`<div class="info-row"><b>${t("venue_label")}</b>${esc(m.venue.name)}</div>`);
+  if (m.referee) rows.push(`<div class="info-row"><b>${t("referee_label")}</b>${esc(m.referee)}</div>`);
+  return `<div class="tab-info">${rows.join("")}</div>`;
 }
 
-function teamLineupHTML(team) {
-  const tm = team.team || {};
-  const startXI = (team.startXI || []).map(x => x.player).filter(p => p && p.grid);
-  const subs = (team.substitutes || []).map(x => x.player).filter(Boolean);
-  const coach = team.coach || {};
+function statLabel(type) {
+  const key = String(type || "").trim().toLowerCase();
+  const map = STAT_LABELS[state.lang] || STAT_LABELS.en;
+  return map[key] || type;
+}
 
-  return `
+function renderStatsTab(data) {
+  const list = data.result || [];
+  if (list.length < 2) return `<div class="tab-empty">${t("tab_empty")}</div>`;
+  const [a, b] = list;
+  const statsA = a.statistics || [];
+  const statsB = b.statistics || [];
+  const rows = statsA.map((s, i) => {
+    const other = statsB[i] || {};
+    const va = s.value ?? 0;
+    const vb = other.value ?? 0;
+    const na = parseFloat(va) || 0;
+    const nb = parseFloat(vb) || 0;
+    const total = na + nb || 1;
+    const pa = Math.round((na / total) * 100);
+    return `
+      <div class="stat-row">
+        <div class="stat-values"><span>${esc(String(va ?? 0))}</span><span>${esc(statLabel(s.type))}</span><span>${esc(String(vb ?? 0))}</span></div>
+        <div class="stat-bar"><span style="width:${pa}%"></span></div>
+      </div>`;
+  }).join("");
+  return `<div class="tab-stats">${rows}</div>`;
+}
+
+function eventIcon(ev) {
+  const type = (ev.type || "").toLowerCase();
+  const detail = (ev.detail || "").toLowerCase();
+  if (type === "goal") return detail.includes("missed") ? "❌" : "⚽";
+  if (type === "card") return detail.includes("red") ? "🟥" : "🟨";
+  if (type === "subst") return "🔁";
+  return "•";
+}
+
+function renderEventsTab(data) {
+  const list = (data.result || []).slice().sort((x, y) => (x.time?.elapsed || 0) - (y.time?.elapsed || 0));
+  if (!list.length) return `<div class="tab-empty">${t("tab_empty")}</div>`;
+  const rows = list.map(ev => {
+    const minute = `${ev.time?.elapsed ?? ""}${ev.time?.extra ? "+" + ev.time.extra : ""}'`;
+    const player = esc(ev.player?.name || "");
+    const assist = ev.assist?.name ? ` <small>(${esc(ev.assist.name)})</small>` : "";
+    const team = esc(ev.team?.name || "");
+    return `
+      <div class="event-row">
+        <span class="event-minute">${minute}</span>
+        <span class="event-icon">${eventIcon(ev)}</span>
+        <span class="event-body"><b>${player}</b>${assist}<small class="event-team">${team}</small></span>
+      </div>`;
+  }).join("");
+  return `<div class="tab-events">${rows}</div>`;
+}
+
+function renderLineupsTab(data) {
+  const list = data.result || [];
+  if (!list.length) return `<div class="tab-empty">${t("tab_empty")}</div>`;
+  return `<div class="tab-lineups">${list.map(team => `
     <div class="lineup-team">
-      <div class="lineup-team-head">
-        ${tm.logo ? `<img src="${esc(tm.logo)}" alt="" loading="lazy">` : ""}
-        <strong>${esc(tm.name || "")}</strong>
+      <div class="lineup-head">
+        ${team.team?.logo ? `<img src="${esc(team.team.logo)}" alt="">` : ""}
+        <b>${esc(team.team?.name || "")}</b>
         <span class="formation">${esc(team.formation || "")}</span>
       </div>
-      <div class="pitch">${pitchHTML(startXI)}</div>
-      ${subs.length ? `
-        <div class="lineup-subs">
-          <b>${t("lineup_subs")}</b>
-          <ul>${subs.map(p => `<li>${p.number != null ? `<span class="sub-num">${esc(p.number)}</span>` : ""}${esc(p.name || "")}</li>`).join("")}</ul>
-        </div>` : ""}
-      ${coach.name ? `<div class="lineup-coach"><b>${t("lineup_coach")}</b>${esc(coach.name)}</div>` : ""}
+      <div class="lineup-group-label">${t("starting_xi")}</div>
+      <ul class="lineup-list">
+        ${(team.startXI || []).map(p => `<li><span class="pnum">${esc(String(p.player?.number ?? ""))}</span>${esc(p.player?.name || "")}</li>`).join("")}
+      </ul>
+      <div class="lineup-group-label">${t("substitutes")}</div>
+      <ul class="lineup-list subs">
+        ${(team.substitutes || []).map(p => `<li><span class="pnum">${esc(String(p.player?.number ?? ""))}</span>${esc(p.player?.name || "")}</li>`).join("")}
+      </ul>
     </div>
-  `;
+  `).join("")}</div>`;
 }
 
-// API-Football "grid" = "row:col". Row 1 = goalkeeper's line, higher rows = further forward.
-function pitchHTML(players) {
-  const rows = {};
-  players.forEach(p => {
-    const [r, c] = String(p.grid).split(":").map(Number);
-    if (!rows[r]) rows[r] = [];
-    rows[r].push({ ...p, col: c });
+function renderH2HTab(data, m) {
+  const list = (data.result || []).map(normalizeFixtureLike);
+  if (!list.length) return `<div class="tab-empty">${t("tab_empty")}</div>`;
+  let homeWins = 0, awayWins = 0, draws = 0;
+  list.forEach(f => {
+    if (f.goals.home == null || f.goals.away == null) return;
+    const homeIsA = f.home.id === m.home.id;
+    const aGoals = homeIsA ? f.goals.home : f.goals.away;
+    const bGoals = homeIsA ? f.goals.away : f.goals.home;
+    if (aGoals > bGoals) homeWins++; else if (aGoals < bGoals) awayWins++; else draws++;
   });
-  const rowKeys = Object.keys(rows).map(Number).sort((a, b) => a - b);
-  const total = rowKeys.length || 1;
+  const summary = `
+    <div class="h2h-summary">
+      <div><b>${homeWins}</b><span>${esc(m.home.name)}</span></div>
+      <div><b>${draws}</b><span>${t("draws_label")}</span></div>
+      <div><b>${awayWins}</b><span>${esc(m.away.name)}</span></div>
+    </div>`;
+  const rows = list.map(f => `
+    <div class="h2h-row">
+      <span class="h2h-date">${esc(formatDate(f.date.slice(0, 10)))}</span>
+      <span class="h2h-teams">${esc(f.home.name)} <b>${f.goals.home ?? "-"} : ${f.goals.away ?? "-"}</b> ${esc(f.away.name)}</span>
+    </div>`).join("");
+  return `<div class="tab-h2h">${summary}${rows}</div>`;
+}
 
-  return rowKeys.map((r, ri) => {
-    const rowPlayers = rows[r].sort((a, b) => a.col - b.col);
-    const top = 100 - ((ri + 0.5) / total) * 100; // GK near bottom, attack near top
-    return rowPlayers.map((p, pi) => {
-      const left = ((pi + 0.5) / rowPlayers.length) * 100;
-      const shortName = (p.name || "").split(" ").slice(-1)[0];
-      return `
-        <div class="player-dot" style="top:${top}%;left:${left}%;">
-          <span class="dot-num">${p.number ?? ""}</span>
-          <span class="dot-name">${esc(shortName)}</span>
-        </div>`;
-    }).join("");
-  }).join("");
+function renderInjuriesTab(data) {
+  const list = data.result || [];
+  if (!list.length) return `<div class="tab-empty">${t("tab_empty")}</div>`;
+  const rows = list.map(inj => `
+    <div class="injury-row">
+      <span class="injury-team">${esc(inj.team?.name || "")}</span>
+      <span class="injury-player"><b>${esc(inj.player?.name || "")}</b><small>${esc(inj.player?.reason || inj.type || "")}</small></span>
+    </div>`).join("");
+  return `<div class="tab-injuries">${rows}</div>`;
+}
+
+function normalizeFixtureLike(item) {
+  const f = item.fixture || {};
+  const teams = item.teams || {};
+  const goals = item.goals || {};
+  return {
+    id: f.id, date: f.date,
+    home: teams.home || {}, away: teams.away || {},
+    goals: { home: goals.home, away: goals.away }
+  };
+}
+
+async function loadTab(panelEl, m, tab) {
+  const content = panelEl.querySelector(".match-tab-content");
+  if (tab === "info") { content.innerHTML = renderInfoTab(m); return; }
+  content.innerHTML = `<div class="tab-loading">${t("tab_loading")}</div>`;
+  try {
+    if (tab === "stats") {
+      const data = await fetchJSON(`/api/fixture/${m.id}/statistics`);
+      content.innerHTML = renderStatsTab(data);
+    } else if (tab === "events") {
+      const data = await fetchJSON(`/api/fixture/${m.id}/events`);
+      content.innerHTML = renderEventsTab(data);
+    } else if (tab === "lineups") {
+      const data = await fetchJSON(`/api/fixture/${m.id}/lineups`);
+      content.innerHTML = renderLineupsTab(data);
+    } else if (tab === "h2h") {
+      const homeId = panelEl.closest(".match").dataset.homeId;
+      const awayId = panelEl.closest(".match").dataset.awayId;
+      const data = await fetchJSON(`/api/fixture/${m.id}/h2h?home=${homeId}&away=${awayId}`);
+      content.innerHTML = renderH2HTab(data, m);
+    } else if (tab === "injuries") {
+      const data = await fetchJSON(`/api/fixture/${m.id}/injuries`);
+      content.innerHTML = renderInjuriesTab(data);
+    }
+  } catch (e) {
+    content.innerHTML = `<div class="tab-empty">${t("state_error")}</div>`;
+  }
+}
+
+function wireMatchDetails(grid) {
+  grid.querySelectorAll(".match").forEach(el => {
+    const id = Number(el.dataset.id);
+    const m = state.matches.find(x => x.id === id);
+    if (!m) return;
+    el.querySelectorAll(".mtab").forEach(btn => {
+      btn.onclick = () => {
+        el.querySelectorAll(".mtab").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        loadTab(el.querySelector(".match-panel"), m, btn.dataset.tab);
+      };
+    });
+  });
 }
 
 /* ---------------- Events ---------------- */
