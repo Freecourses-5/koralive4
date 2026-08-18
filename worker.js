@@ -199,6 +199,35 @@ async function handleFixtureById(request, env, ctx, id) {
   }
 }
 
+async function handleLineups(request, env, ctx, fixtureId) {
+  const ttl = Number(env.LINEUPS_CACHE_S || 300);
+
+  const cache = caches.default;
+  const cacheKey = new Request(request.url, request);
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const data = await callFootballApi("fixtures/lineups", { fixture: fixtureId }, env);
+    const payload = {
+      success: true,
+      cached: false,
+      // Each entry = one team: { team, formation, startXI, substitutes, coach }
+      results: data.response || []
+    };
+    const response = new Response(JSON.stringify(payload), {
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "Cache-Control": `public, max-age=${ttl}`
+      }
+    });
+    ctx.waitUntil(cache.put(cacheKey, response.clone()));
+    return response;
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -210,6 +239,10 @@ export default {
     if (path.startsWith("/api/fixture/")) {
       const id = path.split("/").pop();
       return handleFixtureById(request, env, ctx, id);
+    }
+    if (path.startsWith("/api/lineups/")) {
+      const id = path.split("/").pop();
+      return handleLineups(request, env, ctx, id);
     }
 
     // Everything else (index.html, style.css, app.js, ...) is
