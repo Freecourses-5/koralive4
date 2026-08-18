@@ -1,358 +1,370 @@
-/* ---------------- i18n ---------------- */
-const DICT = {
-  ar: {
-    brand: "كورة لايف",
-    eyebrow_hero: "لوحة النتائج المباشرة",
-    hero_title: "نتائج مباريات كرة القدم، لحظة بلحظة.",
-    hero_desc: "تابع مباريات اليوم والنتائج المباشرة من مصدر بيانات رياضي موثوق.",
-    hero_stat_label: "مباراة اليوم",
-    live_now: "مباراة مباشرة الآن",
-    date_label: "التاريخ",
-    today: "اليوم",
-    search_placeholder: "ابحث عن فريق...",
-    section_eyebrow: "مركز المباريات",
-    section_title: "مباريات اليوم",
-    filter_all: "الكل",
-    filter_live: "مباشر",
-    filter_scheduled: "لم تبدأ",
-    filter_finished: "انتهت",
-    state_loading: "جاري تحميل المباريات...",
-    state_empty: "لا توجد مباريات مطابقة لهذا البحث أو الفلتر.",
-    state_empty_favorites: "مفيش بطولات مفضلة لسه. دوس على ⭐ جنب أي بطولة عشان تضيفها.",
-    scope_all: "الكل",
-    scope_favorites: "المفضلة",
-    scope_top: "أهم المباريات",
-    state_error: "تعذّر تحميل المباريات، حاول مرة أخرى.",
-    status_live: "مباشر",
-    status_finished: "انتهت",
-    venue_label: "الملعب",
-    referee_label: "الحكم",
-    footer_tag: "منصة نتائج مباريات كرة القدم مباشرة",
-    theme_toggle: "تبديل المظهر",
-    lang_toggle: "English",
-    league_fallback: "بطولة",
-    team_fallback: "الفريق",
-  },
-  en: {
-    brand: "Kora Live",
-    eyebrow_hero: "LIVE SCOREBOARD",
-    hero_title: "Football scores, live.",
-    hero_desc: "Follow today's fixtures and live scores from a trusted sports data source.",
-    hero_stat_label: "matches today",
-    live_now: "matches live now",
-    date_label: "Date",
-    today: "Today",
-    search_placeholder: "Search a team...",
-    section_eyebrow: "MATCH CENTER",
-    section_title: "Today's Fixtures",
-    filter_all: "All",
-    filter_live: "Live",
-    filter_scheduled: "Upcoming",
-    filter_finished: "Finished",
-    state_loading: "Loading fixtures…",
-    state_empty: "No matches for this search or filter.",
-    state_empty_favorites: "No favorite leagues yet. Tap ⭐ next to a league to add it.",
-    scope_all: "All",
-    scope_favorites: "Favorites",
-    scope_top: "Top matches",
-    state_error: "Couldn't load fixtures, please try again.",
-    status_live: "LIVE",
-    status_finished: "FT",
-    venue_label: "Venue",
-    referee_label: "Referee",
-    footer_tag: "Live football scores platform",
-    theme_toggle: "Toggle theme",
-    lang_toggle: "العربية",
-    league_fallback: "League",
-    team_fallback: "Team",
-  }
-};
-
-const TOP_LEAGUE_IDS = [
-  2, 3, 848,       // UEFA Champions League, Europa League, Conference League
-  39, 40,          // Premier League, Championship
-  140, 141,        // La Liga, La Liga 2
-  135, 136,        // Serie A, Serie B
-  78, 79,          // Bundesliga, 2. Bundesliga
-  61, 62,          // Ligue 1, Ligue 2
-  88, 94, 203,     // Eredivisie, Primeira Liga, Super Lig
-  307,             // Saudi Pro League
-  233,             // Egyptian Premier League
-  1, 4, 9, 32      // World Cup, Euro, Copa America, World Cup Qualifiers
-];
-
 const state = {
-  lang: localStorage.getItem("lang") || "ar",
-  date: localDate(),
-  filter: "all",
-  scope: "all",
-  query: "",
+  date: new Date(),
   matches: [],
-  favLeagues: JSON.parse(localStorage.getItem("favLeagues") || "[]")
+  filter: "all",
+  query: "",
+  lang: "ar",
+  dark: false,
+  loading: false,
+  error: ""
 };
 
-function t(key) {
-  return DICT[state.lang][key] || DICT.ar[key] || key;
+const $ = (s) => document.querySelector(s);
+
+function localDate(d) {
+  return d.toLocaleDateString("en-CA");
 }
 
-function applyLang() {
-  const dir = state.lang === "ar" ? "rtl" : "ltr";
-  document.documentElement.lang = state.lang;
-  document.documentElement.dir = dir;
-  document.title = state.lang === "ar"
-    ? "كورة لايف | نتائج مباريات كرة القدم"
-    : "Kora Live | Football Scores";
-
-  document.querySelectorAll("[data-i18n]").forEach(el => {
-    el.textContent = t(el.dataset.i18n);
-  });
-  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-    el.placeholder = t(el.dataset.i18nPlaceholder);
-  });
-  document.querySelectorAll("[data-i18n-aria]").forEach(el => {
-    el.setAttribute("aria-label", t(el.dataset.i18nAria));
-  });
-
-  document.getElementById("selectedDate").textContent = formatDate(state.date);
+function formatDate(d) {
+  return new Intl.DateTimeFormat(state.lang === "ar" ? "ar-EG" : "en-US", {
+    weekday: "long",
+    day: "numeric",
+    month: "long"
+  }).format(d);
 }
 
-/* ---------------- Date helpers ---------------- */
-function localDate(d = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Africa/Cairo",
-    year: "numeric", month: "2-digit", day: "2-digit"
-  }).formatToParts(d);
-  const get = t => parts.find(x => x.type === t).value;
-  return `${get("year")}-${get("month")}-${get("day")}`;
+function formatTime(value) {
+  if (!value) return "--:--";
+  return new Intl.DateTimeFormat(state.lang === "ar" ? "ar-EG" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
-function shiftDate(date, days) {
-  const d = new Date(`${date}T12:00:00`);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+function statusLabel(match) {
+  if (match.state === "in") return state.lang === "ar" ? "مباشر" : "LIVE";
+  if (match.completed) return state.lang === "ar" ? "انتهت" : "FT";
+  return formatTime(match.date);
 }
 
-function formatDate(date) {
-  const locale = state.lang === "ar" ? "ar-EG" : "en-GB";
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: "Africa/Cairo", weekday: "long", day: "numeric", month: "long"
-  }).format(new Date(`${date}T12:00:00`));
+function isLive(m) {
+  return m.state === "in";
 }
 
-function formatTime(iso) {
-  const locale = state.lang === "ar" ? "ar-EG" : "en-GB";
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit"
-  }).format(new Date(iso));
+function isFinished(m) {
+  return m.completed || m.state === "post";
 }
 
-/* ---------------- Utils ---------------- */
-function esc(s = "") {
-  return String(s).replace(/[&<>"']/g, c => ({
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
   }[c]));
 }
 
-function statusType(s) {
-  const live = ["1H", "2H", "ET", "BT", "P", "LIVE", "HT"];
-  const finished = ["FT", "AET", "PEN", "AWD", "WO", "CANC", "ABD"];
-  if (live.includes(s)) return "live";
-  if (finished.includes(s)) return "finished";
-  return "scheduled";
+function teamLogo(team) {
+  return team.logo
+    ? `<img class="team-logo" src="${esc(team.logo)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+    : `<span class="team-logo placeholder">⚽</span>`;
 }
 
-function statusLabel(m) {
-  const type = statusType(m.status.short);
-  if (type === "live") return `● ${m.status.elapsed ? m.status.elapsed + "'" : t("status_live")}`;
-  if (type === "finished") return t("status_finished");
-  return formatTime(m.date);
-}
-
-/* ---------------- Data loading ---------------- */
-async function loadMatches() {
-  const stateEl = document.getElementById("state");
-  const grid = document.getElementById("matchesGrid");
-  stateEl.textContent = t("state_loading");
-  stateEl.style.display = "block";
-  grid.innerHTML = "";
-
-  try {
-    const res = await fetch(`/api/fixtures?date=${encodeURIComponent(state.date)}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || t("state_error"));
-
-    state.matches = data.results || [];
-    document.getElementById("selectedDate").textContent = formatDate(state.date);
-
-    document.getElementById("matchCount").textContent = state.matches.length.toLocaleString("en-US");
-
-    const liveCount = state.matches.filter(m => statusType(m.status.short) === "live").length;
-    const liveBadge = document.getElementById("liveBadge");
-    if (liveCount > 0) {
-      liveBadge.hidden = false;
-      document.getElementById("liveCount").textContent = liveCount.toLocaleString("en-US");
-    } else {
-      liveBadge.hidden = true;
-    }
-
-    render();
-  } catch (e) {
-    stateEl.textContent = e.message || t("state_error");
-  }
-}
-
-/* ---------------- Render ---------------- */
 function render() {
-  const grid = document.getElementById("matchesGrid");
-  const stateEl = document.getElementById("state");
-  const q = state.query.trim().toLowerCase();
+  document.documentElement.dir = state.lang === "ar" ? "rtl" : "ltr";
+  document.documentElement.lang = state.lang;
 
-  let list = state.matches.filter(m => {
-    const type = statusType(m.status.short);
-    const matchesFilter = state.filter === "all" || state.filter === type;
-    const matchesQuery = !q ||
-      (m.home.name || "").toLowerCase().includes(q) ||
-      (m.away.name || "").toLowerCase().includes(q);
-    const matchesScope =
-      state.scope === "all" ? true :
-      state.scope === "favorites" ? state.favLeagues.includes(m.league.id) :
-      state.scope === "top" ? TOP_LEAGUE_IDS.includes(m.league.id) : true;
-    return matchesFilter && matchesQuery && matchesScope;
+  $("#dateLabel").textContent = formatDate(state.date);
+  $("#dateShort").textContent = localDate(state.date);
+  $("#heroTitle").textContent = state.lang === "ar"
+    ? "نتائج مباريات كرة القدم، لحظة بلحظة."
+    : "Football results, updated live.";
+  $("#heroSub").textContent = state.lang === "ar"
+    ? "تابع مباريات اليوم والنتائج المباشرة من مصدر بيانات رياضي."
+    : "Follow today's fixtures and live scores from a sports data source.";
+  $("#langBtn").textContent = state.lang === "ar" ? "English" : "العربية";
+  $("#search").placeholder = state.lang === "ar" ? "ابحث عن فريق..." : "Search for a team...";
+  $("#matchesTitle").textContent = state.lang === "ar" ? "مباريات اليوم" : "Today's Matches";
+  $("#importantTitle").textContent = state.lang === "ar" ? "أهم المباريات" : "Top Matches";
+
+  const live = state.matches.filter(isLive).length;
+  $("#liveCount").textContent = live;
+  $("#heroTotal").textContent = state.matches.length;
+
+  const filtered = state.matches.filter(m => {
+    const q = state.query.trim().toLowerCase();
+    const matchesQuery = !q || `${m.home.name} ${m.away.name} ${m.league}`.toLowerCase().includes(q);
+    const matchesFilter =
+      state.filter === "all" ||
+      (state.filter === "live" && isLive(m)) ||
+      (state.filter === "finished" && isFinished(m)) ||
+      (state.filter === "upcoming" && !isLive(m) && !isFinished(m));
+    return matchesQuery && matchesFilter;
   });
 
-  if (!list.length) {
-    grid.innerHTML = "";
-    stateEl.textContent = (state.scope === "favorites" && !state.favLeagues.length)
-      ? t("state_empty_favorites")
-      : t("state_empty");
-    stateEl.style.display = "block";
-    return;
-  }
-  stateEl.style.display = "none";
-
-  const groups = new Map();
-  for (const m of list) {
-    const key = `${m.league.id}-${m.league.name}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(m);
+  if (state.loading) {
+    $("#list").innerHTML = `<div class="empty"><span class="spinner"></span>${state.lang === "ar" ? "جاري تحميل المباريات..." : "Loading matches..."}</div>`;
+  } else if (state.error) {
+    $("#list").innerHTML = `<div class="empty error-box">${esc(state.error)}<button id="retry" class="retry">${state.lang === "ar" ? "إعادة المحاولة" : "Retry"}</button></div>`;
+    $("#retry").onclick = load;
+  } else if (!filtered.length) {
+    $("#list").innerHTML = `<div class="empty">${state.lang === "ar" ? "لا توجد مباريات مطابقة لهذا البحث أو الفلتر." : "No matches match this search or filter."}</div>`;
+  } else {
+    $("#list").innerHTML = filtered.map(matchCard).join("");
   }
 
-  const sortedGroups = [...groups.values()].sort((a, b) => {
-    const aFav = state.favLeagues.includes(a[0].league.id) ? 0 : 1;
-    const bFav = state.favLeagues.includes(b[0].league.id) ? 0 : 1;
-    return aFav - bFav;
+  document.querySelectorAll(".match-card").forEach(card => {
+    card.onclick = (event) => {
+      if (event.target.closest(".lineup-btn")) return;
+      const m = state.matches.find(x => x.id === card.dataset.id);
+      if (m?.link) window.open(m.link, "_blank", "noopener");
+    };
   });
 
-  grid.innerHTML = sortedGroups.map(group => {
-    const league = group[0].league;
-    const isFav = state.favLeagues.includes(league.id);
-    return `
-      <article class="league-card">
-        <div class="league-head">
-          ${league.logo ? `<img src="${esc(league.logo)}" alt="" loading="lazy">` : ""}
-          <div class="league-names">
-            <strong>${esc(league.name || t("league_fallback"))}</strong>
-            <small>${esc(league.country || "")}</small>
-          </div>
-          <button class="fav-btn ${isFav ? "active" : ""}" data-league="${league.id}" aria-label="favorite">★</button>
-        </div>
-        ${group.map(matchRow).join("")}
-      </article>
-    `;
-  }).join("");
-
-  grid.querySelectorAll(".fav-btn").forEach(btn => {
-    btn.onclick = () => {
-      const id = Number(btn.dataset.league);
-      const idx = state.favLeagues.indexOf(id);
-      if (idx === -1) state.favLeagues.push(id); else state.favLeagues.splice(idx, 1);
-      localStorage.setItem("favLeagues", JSON.stringify(state.favLeagues));
-      render();
+  document.querySelectorAll(".lineup-btn").forEach(btn => {
+    btn.onclick = (event) => {
+      event.stopPropagation();
+      openLineup(btn.dataset.id);
     };
   });
 }
 
-function matchRow(m) {
-  const type = statusType(m.status.short);
-  const homeLogo = m.home.logo ? `<img src="${esc(m.home.logo)}" alt="" loading="lazy">` : "";
-  const awayLogo = m.away.logo ? `<img src="${esc(m.away.logo)}" alt="" loading="lazy">` : "";
-
-  const score = m.goals.home == null && m.goals.away == null
-    ? "—"
-    : `${m.goals.home ?? 0} - ${m.goals.away ?? 0}`;
-
-  const details = [];
-  if (m.venue && m.venue.name) details.push(`<span><b>${t("venue_label")}</b>${esc(m.venue.name)}</span>`);
-  if (m.referee) details.push(`<span><b>${t("referee_label")}</b>${esc(m.referee)}</span>`);
-
+function matchCard(m) {
+  const live = isLive(m);
+  const finished = isFinished(m);
+  const lineupText = state.lang === "ar" ? "التشكيلة" : "Lineups";
   return `
-    <details class="match" data-id="${m.id}">
-      <summary>
-        <div class="side home">
-          <span class="team-name">${esc(m.home.name || t("team_fallback"))}</span>
-          ${homeLogo}
+    <article class="match-card ${live ? "is-live" : ""}" data-id="${esc(m.id)}">
+      <div class="match-top">
+        <span class="league">${esc(m.league)}</span>
+        <span class="match-status ${live ? "live" : finished ? "finished" : ""}">
+          ${live ? "● " : ""}${esc(statusLabel(m))}
+        </span>
+      </div>
+      <div class="teams">
+        <div class="team">
+          ${teamLogo(m.home)}
+          <strong>${esc(m.home.name)}</strong>
         </div>
-        <div class="score-box">
-          <span class="score">${score}</span>
-          <span class="status ${type}">${statusLabel(m)}</span>
+        <div class="score">
+          <b>${m.homeScore ?? "-"}</b>
+          <span>:</span>
+          <b>${m.awayScore ?? "-"}</b>
         </div>
-        <div class="side away">
-          ${awayLogo}
-          <span class="team-name">${esc(m.away.name || t("team_fallback"))}</span>
+        <div class="team">
+          ${teamLogo(m.away)}
+          <strong>${esc(m.away.name)}</strong>
         </div>
-      </summary>
-      ${details.length ? `<div class="match-detail">${details.join("")}</div>` : ""}
-    </details>
+      </div>
+      <div class="match-bottom">
+        <span>${esc(m.shortDetail || m.detail || "")}</span>
+        <span>${esc(m.venue || "")}</span>
+      </div>
+      <button class="lineup-btn" data-id="${esc(m.id)}" type="button">⚽ ${lineupText}</button>
+    </article>
   `;
 }
 
-/* ---------------- Events ---------------- */
-document.getElementById("prevDay").onclick = () => { state.date = shiftDate(state.date, -1); loadMatches(); };
-document.getElementById("nextDay").onclick = () => { state.date = shiftDate(state.date, 1); loadMatches(); };
-document.getElementById("todayBtn").onclick = () => { state.date = localDate(); loadMatches(); };
+function lineupPlayerHTML(player, teamSide, formation) {
+  const p = player?.player || {};
+  const pos = player?.pos || "";
+  const grid = player?.grid || "";
+  let top = 50, left = 50;
+  if (grid && /^\d+:\d+$/.test(grid)) {
+    const [row, col] = grid.split(":").map(Number);
+    // API-Football grid is line:column. Convert it into stable pitch percentages.
+    top = 8 + Math.min(8, Math.max(0, row - 1)) * 10.5;
+    left = ((Math.min(5, Math.max(1, col)) - 0.5) / 5) * 100;
+  } else {
+    const fallback = {
+      G: [88, 50], D: [72, 50], M: [53, 50], F: [30, 50]
+    };
+    [top, left] = fallback[pos] || [50, 50];
+  }
+  if (teamSide === "away") top = 100 - top;
 
-document.querySelectorAll(".scope").forEach(btn => {
-  btn.onclick = () => {
-    document.querySelectorAll(".scope").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    state.scope = btn.dataset.scope;
+  const rating = p.rating ? Number(p.rating).toFixed(1) : "-";
+  const ratingClass = Number(rating) >= 7 ? "good" : Number(rating) >= 6.5 ? "mid" : "low";
+  const name = p.name || "Player";
+  const photo = p.photo ? `<img src="${esc(p.photo)}" alt="" loading="lazy" onerror="this.style.display='none'">` : `<span class="player-placeholder">⚽</span>`;
+  return `<div class="pitch-player ${teamSide}" style="top:${top}%;left:${left}%" title="${esc(name)}">
+    <span class="player-rating ${ratingClass}">${esc(rating)}</span>
+    <span class="player-avatar">${photo}</span>
+    <span class="player-name">${esc(name)}</span>
+  </div>`;
+}
+
+function lineupTeamHTML(team, side) {
+  const starters = Array.isArray(team?.startXI) ? team.startXI : [];
+  const subs = Array.isArray(team?.substitutes) ? team.substitutes : [];
+  const formation = team?.formation || "";
+  return { starters, subs, formation, side, team };
+}
+
+function renderLineup(data) {
+  const raw = data?.response || data?.lineups || data || [];
+  const lineups = Array.isArray(raw) ? raw : [];
+  const home = lineups[0] || {};
+  const away = lineups[1] || {};
+  const fixture = state.matches.find(m => m.id === String(data?.fixture?.id || data?.match?.fixture?.id || ""));
+
+  // API returns lineups with team metadata. Keep the order provided by API.
+  const homeName = home.team?.name || fixture?.home?.name || "Home";
+  const awayName = away.team?.name || fixture?.away?.name || "Away";
+  const homeLogo = home.team?.logo || fixture?.home?.logo || "";
+  const awayLogo = away.team?.logo || fixture?.away?.logo || "";
+  const homeScore = fixture?.homeScore ?? "-";
+  const awayScore = fixture?.awayScore ?? "-";
+
+  const players = [
+    ...lineupPlayerHTMLArray(home.startXI || [], "home"),
+    ...lineupPlayerHTMLArray(away.startXI || [], "away")
+  ].join("");
+
+  const substitutes = [...(home.substitutes || []), ...(away.substitutes || [])].map(item => {
+    const p = item?.player || {};
+    return `<div class="sub-row"><span>${esc(p.number ?? "")}</span><strong>${esc(p.name || "Player")}</strong><small>${esc(p.pos || "")}</small></div>`;
+  }).join("");
+
+  return `
+    <div class="lineup-modal-inner">
+      <div class="lineup-header">
+        <button id="closeLineup" class="lineup-close" type="button" aria-label="Close">×</button>
+        <div class="lineup-league">${esc(fixture?.league || "Football")}</div>
+        <div class="lineup-scoreboard">
+          <div class="lineup-team">
+            ${homeLogo ? `<img src="${esc(homeLogo)}" alt="">` : ""}
+            <strong>${esc(homeName)}</strong>
+            <small>${esc(home.formation || "")}</small>
+          </div>
+          <div class="lineup-score">${esc(homeScore)} <span>-</span> ${esc(awayScore)}</div>
+          <div class="lineup-team">
+            ${awayLogo ? `<img src="${esc(awayLogo)}" alt="">` : ""}
+            <strong>${esc(awayName)}</strong>
+            <small>${esc(away.formation || "")}</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="lineup-tabs">
+        <button class="lineup-tab active" data-lineup-tab="pitch">${state.lang === "ar" ? "التشكيلة" : "Lineups"}</button>
+        <button class="lineup-tab" data-lineup-tab="subs">${state.lang === "ar" ? "البدلاء" : "Substitutes"}</button>
+      </div>
+
+      <div class="lineup-tab-content active" data-lineup-content="pitch">
+        <div class="formation-switch">
+          <span>${esc(home.formation || "-")}</span>
+          <span>${esc(away.formation || "-")}</span>
+        </div>
+        <div class="football-pitch">
+          <div class="pitch-lines"></div>
+          ${players}
+        </div>
+      </div>
+
+      <div class="lineup-tab-content" data-lineup-content="subs">
+        <div class="subs-grid">${substitutes || `<div class="sub-empty">${state.lang === "ar" ? "لا توجد بيانات للبدلاء." : "No substitutes data."}</div>`}</div>
+      </div>
+    </div>`;
+}
+
+function lineupPlayerHTMLArray(players, side) {
+  return players.map(player => lineupPlayerHTML(player, side, "")).join("");
+}
+
+async function openLineup(id) {
+  const modal = $("#lineupModal");
+  if (!modal) return;
+  modal.classList.add("open");
+  modal.innerHTML = `<div class="lineup-loading"><span class="spinner"></span>${state.lang === "ar" ? "جاري تحميل التشكيلة..." : "Loading lineups..."}</div>`;
+  document.body.classList.add("modal-open");
+
+  try {
+    const response = await fetch(`/api/lineups?id=${encodeURIComponent(id)}`, { headers: { accept: "application/json" }, cache: "no-store" });
+    const raw = await response.text();
+    let data;
+    try { data = JSON.parse(raw); } catch { throw new Error("استجابة الخادم ليست JSON صحيحة."); }
+    if (!response.ok || !data.ok) throw new Error(data?.error || (state.lang === "ar" ? "تعذر تحميل التشكيلة." : "Could not load lineups."));
+    if (!Array.isArray(data.lineups) || data.lineups.length < 1) throw new Error(state.lang === "ar" ? "التشكيلة غير متاحة لهذه المباراة." : "Lineups are not available for this match.");
+    modal.innerHTML = renderLineup({ response: data.lineups, fixture: { id } });
+    bindLineupModal();
+  } catch (e) {
+    modal.innerHTML = `<div class="lineup-error"><button id="closeLineup" class="lineup-close" type="button">×</button><div>${esc(e.message || "Error")}</div></div>`;
+    bindLineupModal();
+  }
+}
+
+function bindLineupModal() {
+  const modal = $("#lineupModal");
+  const close = $("#closeLineup");
+  if (close) close.onclick = closeLineup;
+  modal.onclick = e => { if (e.target === modal) closeLineup(); };
+  document.querySelectorAll(".lineup-tab").forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll(".lineup-tab").forEach(x => x.classList.remove("active"));
+      document.querySelectorAll(".lineup-tab-content").forEach(x => x.classList.remove("active"));
+      tab.classList.add("active");
+      const content = document.querySelector(`[data-lineup-content="${tab.dataset.lineupTab}"]`);
+      if (content) content.classList.add("active");
+    };
+  });
+}
+
+function closeLineup() {
+  const modal = $("#lineupModal");
+  if (!modal) return;
+  modal.classList.remove("open");
+  modal.innerHTML = "";
+  document.body.classList.remove("modal-open");
+}
+
+
+async function load() {
+  state.loading = true;
+  state.error = "";
+  render();
+
+  try {
+    const response = await fetch(`/api/matches?date=${encodeURIComponent(localDate(state.date))}`, {
+      headers: { accept: "application/json" },
+      cache: "no-store"
+    });
+
+    const raw = await response.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error("استجابة الخادم ليست JSON صحيحة.");
+    }
+
+    if (!response.ok || !data.ok) {
+      throw new Error(data?.error || "تعذر تحميل المباريات.");
+    }
+
+    state.matches = Array.isArray(data.matches) ? data.matches : [];
+  } catch (e) {
+    state.matches = [];
+    state.error = e.message || "حدث خطأ غير متوقع.";
+  } finally {
+    state.loading = false;
     render();
-  };
-});
+  }
+}
+
+function changeDate(delta) {
+  state.date.setDate(state.date.getDate() + delta);
+  load();
+}
+
+$("#prev").onclick = () => changeDate(-1);
+$("#next").onclick = () => changeDate(1);
+$("#today").onclick = () => { state.date = new Date(); load(); };
+$("#search").oninput = (e) => { state.query = e.target.value; render(); };
+$("#langBtn").onclick = () => {
+  state.lang = state.lang === "ar" ? "en" : "ar";
+  render();
+};
+$("#themeBtn").onclick = () => {
+  state.dark = !state.dark;
+  document.body.classList.toggle("dark", state.dark);
+};
 
 document.querySelectorAll(".filter").forEach(btn => {
   btn.onclick = () => {
-    document.querySelectorAll(".filter").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".filter").forEach(x => x.classList.remove("active"));
     btn.classList.add("active");
     state.filter = btn.dataset.filter;
     render();
   };
 });
 
-let searchTimer;
-document.getElementById("searchInput").oninput = (e) => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { state.query = e.target.value; render(); }, 150);
-};
-
-document.getElementById("themeBtn").onclick = () => {
-  document.documentElement.classList.toggle("dark");
-  localStorage.setItem("dark", document.documentElement.classList.contains("dark") ? "1" : "0");
-};
-if (localStorage.getItem("dark") === "1") document.documentElement.classList.add("dark");
-
-document.getElementById("langBtn").onclick = () => {
-  state.lang = state.lang === "ar" ? "en" : "ar";
-  localStorage.setItem("lang", state.lang);
-  applyLang();
-  render();
-};
-
-/* ---------------- Init ---------------- */
-applyLang();
-loadMatches();
-
-// Gentle auto-refresh for live matches on today's view.
-setInterval(() => {
-  if (state.date === localDate()) loadMatches();
-}, 60000);
+load();
+setInterval(load, 30000);
