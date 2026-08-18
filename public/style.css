@@ -205,8 +205,8 @@ h2 { font-family: var(--font-display); font-weight: 600; margin: 4px 0 0; font-s
 }
 .league-head img { width: 26px; height: 26px; object-fit: contain; }
 .league-head .league-names { flex: 1; }
-.league-head strong { display: block; font-size: 14px; }
-.league-head small { display: block; color: var(--muted); font-size: 12px; }
+.league-head strong { display: block; font-size: 14px; unicode-bidi: plaintext; }
+.league-head small { display: block; color: var(--muted); font-size: 12px; unicode-bidi: plaintext; }
 .fav-btn {
   border: none; background: none; cursor: pointer; font-size: 18px; line-height: 1;
   color: var(--border); padding: 4px;
@@ -231,6 +231,7 @@ h2 { font-family: var(--font-display); font-weight: 600; margin: 4px 0 0; font-s
   font-weight: 700; font-size: 13.5px; line-height: 1.25;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden;
+  direction: ltr; unicode-bidi: plaintext; text-align: match-parent;
 }
 
 .score-box { text-align: center; min-width: 92px; }
