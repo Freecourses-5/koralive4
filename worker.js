@@ -97,6 +97,21 @@ function jsonError(error) {
   );
 }
 
+
+function jsonError(error) {
+  return new Response(
+    JSON.stringify({
+      success: false,
+      message: error.message || "Unexpected error.",
+      details: error.details || null
+    }),
+    {
+      status: error.status || 500,
+      headers: { "content-type": "application/json; charset=utf-8" }
+    }
+  );
+}
+
 async function handleHealth(env) {
   const timezone = env.TIMEZONE || "Africa/Cairo";
   return new Response(
@@ -199,22 +214,18 @@ async function handleFixtureById(request, env, ctx, id) {
   }
 }
 
-async function handleLineups(request, env, ctx, fixtureId) {
-  const ttl = Number(env.LINEUPS_CACHE_S || 300);
-
+// Generic helper for the fixture sub-resource endpoints below: they all
+// follow the same shape (call one API-Football endpoint, cache the raw
+// response array under { success, result }).
+async function handlePassthrough(request, env, ctx, endpoint, params, ttl) {
   const cache = caches.default;
   const cacheKey = new Request(request.url, request);
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
 
   try {
-    const data = await callFootballApi("fixtures/lineups", { fixture: fixtureId }, env);
-    const payload = {
-      success: true,
-      cached: false,
-      // Each entry = one team: { team, formation, startXI, substitutes, coach }
-      results: data.response || []
-    };
+    const data = await callFootballApi(endpoint, params, env);
+    const payload = { success: true, result: data.response || [] };
     const response = new Response(JSON.stringify(payload), {
       headers: {
         "content-type": "application/json; charset=utf-8",
@@ -228,6 +239,26 @@ async function handleLineups(request, env, ctx, fixtureId) {
   }
 }
 
+async function handleFixtureStatistics(request, env, ctx, id) {
+  return handlePassthrough(request, env, ctx, "fixtures/statistics", { fixture: id }, 300);
+}
+
+async function handleFixtureEvents(request, env, ctx, id) {
+  return handlePassthrough(request, env, ctx, "fixtures/events", { fixture: id }, 300);
+}
+
+async function handleFixtureLineups(request, env, ctx, id) {
+  return handlePassthrough(request, env, ctx, "fixtures/lineups", { fixture: id }, 300);
+}
+
+async function handleFixtureInjuries(request, env, ctx, id) {
+  return handlePassthrough(request, env, ctx, "injuries", { fixture: id }, 1800);
+}
+
+async function handleFixtureH2H(request, env, ctx, homeId, awayId) {
+  return handlePassthrough(request, env, ctx, "fixtures/headtohead", { h2h: `${homeId}-${awayId}`, last: 10 }, 21600);
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -236,13 +267,24 @@ export default {
     if (path === "/api/health") return handleHealth(env);
     if (path === "/api/fixtures") return handleFixtures(request, env, ctx);
     if (path === "/api/live") return handleLive(request, env, ctx);
-    if (path.startsWith("/api/fixture/")) {
-      const id = path.split("/").pop();
-      return handleFixtureById(request, env, ctx, id);
-    }
-    if (path.startsWith("/api/lineups/")) {
-      const id = path.split("/").pop();
-      return handleLineups(request, env, ctx, id);
+
+    const parts = path.split("/").filter(Boolean); // e.g. ["api","fixture","123","statistics"]
+    if (parts[0] === "api" && parts[1] === "fixture" && parts[2]) {
+      const id = parts[2];
+      const sub = parts[3];
+      if (!sub) return handleFixtureById(request, env, ctx, id);
+      if (sub === "statistics") return handleFixtureStatistics(request, env, ctx, id);
+      if (sub === "events") return handleFixtureEvents(request, env, ctx, id);
+      if (sub === "lineups") return handleFixtureLineups(request, env, ctx, id);
+      if (sub === "injuries") return handleFixtureInjuries(request, env, ctx, id);
+      if (sub === "h2h") {
+        const home = url.searchParams.get("home");
+        const away = url.searchParams.get("away");
+        if (!home || !away) {
+          return jsonError({ status: 400, message: "Missing home/away query params." });
+        }
+        return handleFixtureH2H(request, env, ctx, home, away);
+      }
     }
 
     // Everything else (index.html, style.css, app.js, ...) is
