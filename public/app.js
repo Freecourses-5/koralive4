@@ -18,6 +18,10 @@ const DICT = {
     filter_finished: "انتهت",
     state_loading: "جاري تحميل المباريات...",
     state_empty: "لا توجد مباريات مطابقة لهذا البحث أو الفلتر.",
+    state_empty_favorites: "مفيش بطولات مفضلة لسه. دوس على ⭐ جنب أي بطولة عشان تضيفها.",
+    scope_all: "الكل",
+    scope_favorites: "المفضلة",
+    scope_top: "أهم المباريات",
     state_error: "تعذّر تحميل المباريات، حاول مرة أخرى.",
     status_live: "مباشر",
     status_finished: "انتهت",
@@ -47,6 +51,10 @@ const DICT = {
     filter_finished: "Finished",
     state_loading: "Loading fixtures…",
     state_empty: "No matches for this search or filter.",
+    state_empty_favorites: "No favorite leagues yet. Tap ⭐ next to a league to add it.",
+    scope_all: "All",
+    scope_favorites: "Favorites",
+    scope_top: "Top matches",
     state_error: "Couldn't load fixtures, please try again.",
     status_live: "LIVE",
     status_finished: "FT",
@@ -60,10 +68,24 @@ const DICT = {
   }
 };
 
+const TOP_LEAGUE_IDS = [
+  2, 3, 848,       // UEFA Champions League, Europa League, Conference League
+  39, 40,          // Premier League, Championship
+  140, 141,        // La Liga, La Liga 2
+  135, 136,        // Serie A, Serie B
+  78, 79,          // Bundesliga, 2. Bundesliga
+  61, 62,          // Ligue 1, Ligue 2
+  88, 94, 203,     // Eredivisie, Primeira Liga, Super Lig
+  307,             // Saudi Pro League
+  233,             // Egyptian Premier League
+  1, 4, 9, 32      // World Cup, Euro, Copa America, World Cup Qualifiers
+];
+
 const state = {
   lang: localStorage.getItem("lang") || "ar",
   date: localDate(),
   filter: "all",
+  scope: "all",
   query: "",
   matches: [],
   favLeagues: JSON.parse(localStorage.getItem("favLeagues") || "[]")
@@ -191,12 +213,18 @@ function render() {
     const matchesQuery = !q ||
       (m.home.name || "").toLowerCase().includes(q) ||
       (m.away.name || "").toLowerCase().includes(q);
-    return matchesFilter && matchesQuery;
+    const matchesScope =
+      state.scope === "all" ? true :
+      state.scope === "favorites" ? state.favLeagues.includes(m.league.id) :
+      state.scope === "top" ? TOP_LEAGUE_IDS.includes(m.league.id) : true;
+    return matchesFilter && matchesQuery && matchesScope;
   });
 
   if (!list.length) {
     grid.innerHTML = "";
-    stateEl.textContent = t("state_empty");
+    stateEl.textContent = (state.scope === "favorites" && !state.favLeagues.length)
+      ? t("state_empty_favorites")
+      : t("state_empty");
     stateEl.style.display = "block";
     return;
   }
@@ -282,6 +310,15 @@ function matchRow(m) {
 document.getElementById("prevDay").onclick = () => { state.date = shiftDate(state.date, -1); loadMatches(); };
 document.getElementById("nextDay").onclick = () => { state.date = shiftDate(state.date, 1); loadMatches(); };
 document.getElementById("todayBtn").onclick = () => { state.date = localDate(); loadMatches(); };
+
+document.querySelectorAll(".scope").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".scope").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.scope = btn.dataset.scope;
+    render();
+  };
+});
 
 document.querySelectorAll(".filter").forEach(btn => {
   btn.onclick = () => {
