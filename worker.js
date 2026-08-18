@@ -97,21 +97,6 @@ function jsonError(error) {
   );
 }
 
-
-function jsonError(error) {
-  return new Response(
-    JSON.stringify({
-      success: false,
-      message: error.message || "Unexpected error.",
-      details: error.details || null
-    }),
-    {
-      status: error.status || 500,
-      headers: { "content-type": "application/json; charset=utf-8" }
-    }
-  );
-}
-
 async function handleHealth(env) {
   const timezone = env.TIMEZONE || "Africa/Cairo";
   return new Response(
