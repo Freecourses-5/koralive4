@@ -1,86 +1,103 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0e9f4a">
-  <meta name="description" content="كورة لايف - نتائج ومواعيد مباريات كرة القدم">
-  <title>كورة لايف | نتائج المباريات</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="نتائج مباريات كرة القدم اليوم، النتائج المباشرة وترتيب البطولات من مصدر بيانات رياضي موثوق." />
+  <title>كورة لايف | نتائج مباريات كرة القدم</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Tajawal:wght@400;500;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="header">
-    <div class="brand"><span class="ball">⚽</span><span>كورة لايف</span></div>
-    <div class="header-actions">
-      <button id="themeBtn" class="round-btn" aria-label="تغيير المظهر">☾</button>
-      <button id="langBtn" class="pill-btn">English</button>
+  <header class="topbar">
+    <div class="container nav">
+      <a class="brand" href="/">
+        <span class="brand-ball">⚽</span>
+        <span data-i18n="brand">كورة لايف</span>
+      </a>
+      <div class="nav-actions">
+        <button id="langBtn" class="pill-btn" type="button">
+          <span data-i18n="lang_toggle">English</span>
+        </button>
+        <button id="themeBtn" class="icon-btn" type="button" data-i18n-aria="theme_toggle" aria-label="تبديل المظهر">
+          <svg class="icon-moon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
+        </button>
+      </div>
     </div>
+    <div class="pitch-line" aria-hidden="true"></div>
   </header>
 
-  <main>
+  <main class="container">
     <section class="hero">
-      <div class="hero-lines"></div>
-      <div class="hero-content">
-        <div class="eyebrow">لوحة النتائج المباشرة</div>
-        <h1 id="heroTitle">نتائج مباريات كرة القدم، لحظة بلحظة.</h1>
-        <p id="heroSub">تابع مباريات اليوم والنتائج المباشرة من مصدر بيانات رياضي.</p>
-        <div class="hero-stat">
-          <div class="hero-stat-number" id="heroTotal">0</div>
-          <div>مباراة اليوم</div>
-          <div class="live-mini"><i></i><b id="liveCount">0</b> مباراة مباشرة الآن</div>
+      <div class="hero-copy">
+        <span class="eyebrow" data-i18n="eyebrow_hero">لوحة النتائج المباشرة</span>
+        <h1 data-i18n="hero_title">نتائج مباريات كرة القدم، لحظة بلحظة.</h1>
+        <p data-i18n="hero_desc">تابع مباريات اليوم والنتائج المباشرة من مصدر بيانات رياضي موثوق.</p>
+      </div>
+      <div class="hero-stat">
+        <strong id="matchCount">—</strong>
+        <span data-i18n="hero_stat_label">مباراة اليوم</span>
+        <div id="liveBadge" class="live-badge" hidden>
+          <span class="dot"></span>
+          <span id="liveCount">0</span>
+          <span data-i18n="live_now">مباراة مباشرة الآن</span>
         </div>
       </div>
     </section>
 
-    <section class="section">
-      <div class="section-heading">
-        <div>
-          <div class="eyebrow green">اختيارات اليوم</div>
-          <h2 id="importantTitle">أهم المباريات</h2>
-        </div>
-        <span class="muted">مباريات مختارة لك</span>
-      </div>
-
+    <section class="toolbar">
       <div class="date-bar">
-        <button id="today" class="today-btn">اليوم</button>
-        <button id="prev" class="arrow">‹</button>
-        <div class="date-text">
-          <small>التاريخ</small>
-          <strong id="dateLabel">—</strong>
-          <span id="dateShort"></span>
+        <button id="prevDay" class="round-btn" aria-label="prev">‹</button>
+        <div class="date-display">
+          <small data-i18n="date_label">التاريخ</small>
+          <strong id="selectedDate">—</strong>
         </div>
-        <button id="next" class="arrow">›</button>
+        <button id="nextDay" class="round-btn" aria-label="next">›</button>
+        <button id="todayBtn" class="today-btn" data-i18n="today">اليوم</button>
+      </div>
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-3.8-3.8"/></svg>
+        <input id="searchInput" type="search" data-i18n-placeholder="search_placeholder" placeholder="ابحث عن فريق...">
+      </div>
+    </section>
+
+    <section id="matches" class="matches-section">
+      <div class="scope-tabs" role="tablist">
+        <button class="scope active" data-scope="all" data-i18n="scope_all">الكل</button>
+        <button class="scope" data-scope="favorites" data-i18n="scope_favorites">المفضلة</button>
+        <button class="scope" data-scope="top" data-i18n="scope_top">أهم المباريات</button>
       </div>
 
-      <div class="search-wrap">
-        <input id="search" type="search" placeholder="ابحث عن فريق..." autocomplete="off">
-        <span>⌕</span>
-      </div>
-
-      <div class="section-heading matches-heading">
+      <div class="section-head">
         <div>
-          <div class="eyebrow">مركز المباريات</div>
-          <h2 id="matchesTitle">مباريات اليوم</h2>
+          <span class="eyebrow" data-i18n="section_eyebrow">مركز المباريات</span>
+          <h2 data-i18n="section_title">مباريات اليوم</h2>
+        </div>
+        <div class="filters" role="tablist">
+          <button class="filter active" data-filter="all" data-i18n="filter_all">الكل</button>
+          <button class="filter" data-filter="live" data-i18n="filter_live">مباشر</button>
+          <button class="filter" data-filter="scheduled" data-i18n="filter_scheduled">لم تبدأ</button>
+          <button class="filter" data-filter="finished" data-i18n="filter_finished">انتهت</button>
         </div>
       </div>
 
-      <div class="filters">
-        <button class="filter active" data-filter="all">الكل</button>
-        <button class="filter" data-filter="live">مباشر</button>
-        <button class="filter" data-filter="upcoming">لم تبدأ</button>
-        <button class="filter" data-filter="finished">انتهت</button>
-      </div>
-
-      <div id="list" class="matches"></div>
+      <div id="state" class="state" data-i18n="state_loading">جاري تحميل المباريات...</div>
+      <div id="matchesGrid" class="matches-grid"></div>
     </section>
   </main>
 
-  <div id="lineupModal" class="lineup-modal" aria-hidden="true"></div>
-
   <footer>
-    <strong>كورة لايف</strong>
-    <p>منصة نتائج مباريات كرة القدم مباشرة</p>
-    <span>يتم تحديث البيانات تلقائياً كل 30 ثانية.</span>
+    <div class="pitch-line" aria-hidden="true"></div>
+    <div class="container footer-inner">
+      <div>
+        <strong data-i18n="brand">كورة لايف</strong>
+        <span data-i18n="footer_tag">منصة نتائج مباريات كرة القدم مباشرة</span>
+      </div>
+      <span class="footer-source">Powered by API-Football</span>
+    </div>
   </footer>
 
   <script src="/app.js"></script>
